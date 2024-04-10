@@ -1,4 +1,6 @@
-﻿using Microsoft.Graph.Models;
+﻿using Azure.Identity;
+using Microsoft.Graph;
+using Microsoft.Graph.Models;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Collections.Generic;
@@ -39,6 +41,21 @@ namespace AADB2CExtensionModifier.Services
             User user = new User();
             // TODO : Implement this method
             return user;
+        }
+
+        // method to authenticate to graph api
+        public GraphServiceClient GetGraphClient(string tenantId, string clientId, string[] scopes)
+        {
+            var options = new InteractiveBrowserCredentialOptions
+            {
+                TenantId = tenantId,
+                ClientId = clientId,
+                AuthorityHost = AzureAuthorityHosts.AzurePublicCloud,
+                RedirectUri = new Uri("http://localhost"),
+            };
+            var interactiveCredential = new InteractiveBrowserCredential(options);
+            var graphClient = new GraphServiceClient(interactiveCredential, scopes);
+            return graphClient;
         }
     }
 }
