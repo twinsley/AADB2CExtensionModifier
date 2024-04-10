@@ -27,6 +27,12 @@ namespace AADB2CExtensionModifier.Services
             return extensionAttributes;
         }
 
+        // This method updates the user's extension attributes.
+        public void UpdateUserExtensionAttributes(string userIdentifier, string tenantId, List<string> extensionAttributes)
+        {
+            // TODO : Implement this method
+        }
+
         // This method gets the user's graph user object. It should take an email as input and return the user object.
         public User GetGraphUser(string email, string tenantId)
         {
