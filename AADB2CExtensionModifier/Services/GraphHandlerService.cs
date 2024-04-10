@@ -14,7 +14,7 @@ namespace AADB2CExtensionModifier.Services
     internal class GraphHandlerService
     {
         // This method is used to get the B2C extension application id and parse it for use in querying the extension attributes.
-        public String GetB2cExtensionAppId(string tenantId)
+        public String GetB2cExtensionAppId(string tenantId, GraphServiceClient graphclient)
         {
             string appId = string.Empty;
             // TODO : Implement this method
@@ -22,7 +22,7 @@ namespace AADB2CExtensionModifier.Services
         }
 
         // This method gets the B2C extension attributes for the user.
-        public List<string> GetUserExtensionAttributes(string userIdentifier, string tenantId)
+        public List<string> GetUserExtensionAttributes(string userIdentifier, string tenantId, GraphServiceClient graphclient)
         {
             List<string> extensionAttributes = new List<string>();
             // TODO : Implement this method
@@ -30,13 +30,13 @@ namespace AADB2CExtensionModifier.Services
         }
 
         // This method updates the user's extension attributes.
-        public void UpdateUserExtensionAttributes(string userIdentifier, string tenantId, List<string> extensionAttributes)
+        public void UpdateUserExtensionAttributes(string userIdentifier, string tenantId, List<string> extensionAttributes, GraphServiceClient graphclient)
         {
             // TODO : Implement this method
         }
 
         // This method gets the user's graph user object. It should take an email as input and return the user object.
-        public User GetGraphUser(string email, string tenantId)
+        public User GetGraphUser(string email, string tenantId, GraphServiceClient graphclient)
         {
             User user = new User();
             // TODO : Implement this method
