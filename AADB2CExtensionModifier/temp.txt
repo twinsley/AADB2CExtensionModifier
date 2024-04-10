@@ -1,0 +1,27 @@
+﻿# TODO - Set up AAD auth, including refreshing the token. Probably an auth library
+
+Business Logic:
+	Send the user to the browser to log in and get a token
+	Use the token to get the available B2C tenants somehow
+		Alternatively, have the user enter the tenant and client ID for an existing app reg manually, 
+		then use that to get the rest.
+	Populate the dropdown with the available tenants, and allow the user to select one
+	Once the user has selected a tenant, get the app registrations for that tenant.
+		Get the app registration for B2C extension attributes
+		Get the extension attributes for the app registration
+		Parse the clientID from the app reg, remove the hyphens, and store it.
+	Have a field for a user to look up a user by full name or email, then select one.
+	Populate a table with the extension attributes of the selected user and allow the user to modify the values
+		Validate that the values are the correct type
+		Allow the user to save the values back to the user (save button)
+
+
+UI:
+	- Dropdown for selecting the tenant (or text input for tenant ID and client ID(probably better))
+	- Table for displaying the extension attributes
+	- Save button
+	- Error message display (popups?)
+	- Loading spinner
+	- Logout button
+	- Login button
+
