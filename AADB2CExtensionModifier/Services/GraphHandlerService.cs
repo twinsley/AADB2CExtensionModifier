@@ -33,13 +33,31 @@ namespace AADB2CExtensionModifier.Services
             Console.WriteLine($"B2C Extension App Id: {appId}");
             return appId;
         }
+        public List<IdentityUserFlowAttribute> GetExtensionAttributes(GraphServiceClient graphclient)
+        {
+            List<IdentityUserFlowAttribute> extensionAttributes = graphclient.Identity.UserFlowAttributes.GetAsync().Result.Value.ToList();
+            Console.WriteLine($"Extension Attributes: {extensionAttributes.ToString}");
+            return extensionAttributes;
+        }
 
         // This method gets the B2C extension attributes for the user.
-        public List<string> GetUserExtensionAttributes(string userIdentifier, GraphServiceClient graphclient)
+        public User GetUserExtensionAttributes(string userIdentifier, GraphServiceClient graphclient)
         {
-            List<string> extensionAttributes = new List<string>();
+            IdentityUserFlowAttributeCollectionResponse extensionAttributes = graphclient.Identity.UserFlowAttributes.GetAsync(requestConfig =>
+            {
+                requestConfig.QueryParameters.Select =
+                    ["id"];
+            }).Result;
+            String filterIdList = String.Join(',', extensionAttributes.Value.Select(x => x.Id));
+            Console.WriteLine($"Filter Id List: {filterIdList}");
+            User userAttributes = graphclient.Users[userIdentifier].GetAsync(requestConfig =>
+            {
+                requestConfig.QueryParameters.Select =
+                    [$"{filterIdList}"];
+            }).Result;
+
             // TODO : Implement this method
-            return extensionAttributes;
+            return userAttributes;
         }
 
         // This method updates the user's extension attributes.
