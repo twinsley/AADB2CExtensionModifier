@@ -53,7 +53,7 @@ namespace AADB2CExtensionModifier.Services
             User userAttributes = graphclient.Users[userIdentifier].GetAsync(requestConfig =>
             {
                 requestConfig.QueryParameters.Select =
-                    [$"{filterIdList}"];
+                    [$"'id', {filterIdList}"];
             }).Result;
 
             // TODO : Implement this method
@@ -61,7 +61,7 @@ namespace AADB2CExtensionModifier.Services
         }
 
         // This method updates the user's extension attributes.
-        public void UpdateUserExtensionAttributes(string userIdentifier, string tenantId, List<string> extensionAttributes, GraphServiceClient graphclient)
+        public void UpdateUserExtensionAttributes(string userIdentifier, User user, GraphServiceClient graphclient)
         {
             // TODO : Implement this method
         }
