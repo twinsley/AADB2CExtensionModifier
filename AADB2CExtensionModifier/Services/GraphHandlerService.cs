@@ -36,10 +36,21 @@ namespace AADB2CExtensionModifier.Services
         }
 
         // This method gets the user's graph user object. It should take an email as input and return the user object.
-        public User GetGraphUser(string email, string tenantId, GraphServiceClient graphclient)
+        public User GetGraphUser(string email, GraphServiceClient graphclient)
         {
-            User user = new User();
-            // TODO : Implement this method
+            UserCollectionResponse? users;
+            users = graphclient.Users.GetAsync(requestConfig =>
+            {
+                requestConfig.QueryParameters.Select =
+                    ["id", "fullname", "email"];
+                requestConfig.QueryParameters.Filter =
+                    $"subject eq '{email}'";
+            }).Result;
+            if (users == null)
+            {
+                return null;
+            }
+            User user = users.Value.FirstOrDefault();
             return user;
         }
 
