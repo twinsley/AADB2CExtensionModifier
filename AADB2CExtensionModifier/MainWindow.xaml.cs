@@ -1,4 +1,5 @@
 ﻿using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -42,6 +43,10 @@ namespace AADB2CExtensionModifier
         public MainWindow()
         {
             InitializeComponent();
+            
+            // Redirect Console output to Debug output
+            Console.SetOut(new DebugTextWriter());
+            
             _graphService = new GraphHandlerService();
             _extensionAttributes = new ObservableCollection<ExtensionAttributeModel>();
             AttributesDataGrid.ItemsSource = _extensionAttributes;
@@ -242,26 +247,78 @@ namespace AADB2CExtensionModifier
 
                 _extensionAttributes.Clear();
 
-                // Get the user with all extension attributes
+                Debug.WriteLine($"Attempting to load user with ID: {_currentUser.Id}");
+
+                // First, discover what extension properties exist
+                List<string> extensionPropertyNames = null;
+                if (!string.IsNullOrEmpty(_b2cExtensionAppId))
+                {
+                    Debug.WriteLine("Discovering extension properties from B2C app...");
+                    extensionPropertyNames = await Task.Run(() => _graphService.GetB2cExtensionPropertyNames(_graphClient, _b2cExtensionAppId));
+                    Debug.WriteLine($"Discovered {extensionPropertyNames?.Count ?? 0} extension properties");
+                }
+
+                // Build the select query with base properties + extension properties
+                var selectProperties = new List<string> { "id", "displayName", "mail", "userPrincipalName" };
+                if (extensionPropertyNames != null && extensionPropertyNames.Count > 0)
+                {
+                    selectProperties.AddRange(extensionPropertyNames);
+                    Debug.WriteLine($"Requesting user with {selectProperties.Count} properties including {extensionPropertyNames.Count} extensions");
+                }
+
+                // Get user with explicit property selection
                 var user = await _graphClient.Users[_currentUser.Id].GetAsync(config =>
                 {
-                    config.QueryParameters.Select = new[] { "*" };
+                    config.QueryParameters.Select = selectProperties.ToArray();
                 });
 
-                // Get available extension attributes from the tenant
-                var availableAttributes = await Task.Run(() => _graphService.GetExtensionAttributes(_graphClient));
+                Debug.WriteLine($"User retrieved successfully");
+                Debug.WriteLine($"User.Mail: {user.Mail}");
+                Debug.WriteLine($"User.DisplayName: {user.DisplayName}");
+                Debug.WriteLine($"User AdditionalData count: {user.AdditionalData?.Count ?? 0}");
+                
+                // Debug: Log all additional data keys
+                if (user.AdditionalData != null && user.AdditionalData.Count > 0)
+                {
+                    Debug.WriteLine("All user properties (from AdditionalData):");
+                    foreach (var kvp in user.AdditionalData)
+                    {
+                        if (!kvp.Key.StartsWith("@odata"))
+                        {
+                            Debug.WriteLine($"  Key: {kvp.Key}, Value: {kvp.Value}");
+                        }
+                    }
+                }
 
-                // Process extension attributes
+                // Get available extension attributes from the tenant (this may fail due to permissions, which is OK)
+                List<IdentityUserFlowAttribute> availableAttributes = null;
+                try
+                {
+                    availableAttributes = await Task.Run(() => _graphService.GetExtensionAttributes(_graphClient));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Could not retrieve IdentityUserFlowAttributes (may be missing permission): {ex.Message}");
+                    // This is OK, we'll continue without the display names
+                }
+
+                Debug.WriteLine($"B2C Extension App ID: {_b2cExtensionAppId ?? "NULL"}");
+                Debug.WriteLine($"Available attributes count: {availableAttributes?.Count ?? 0}");
+
+                // Process extension attributes from AdditionalData
                 if (user.AdditionalData != null && !string.IsNullOrEmpty(_b2cExtensionAppId))
                 {
                     var extensionPrefix = $"extension_{_b2cExtensionAppId}_";
+                    Debug.WriteLine($"Looking for extension attributes with prefix: {extensionPrefix}");
 
                     foreach (var kvp in user.AdditionalData)
                     {
-                        if (kvp.Key.StartsWith(extensionPrefix))
+                        if (kvp.Key.StartsWith(extensionPrefix) || (kvp.Key.StartsWith("extension_") && !kvp.Key.StartsWith("@")))
                         {
                             var attributeName = kvp.Key;
-                            var shortName = kvp.Key.Replace(extensionPrefix, "");
+                            var shortName = kvp.Key.StartsWith(extensionPrefix) 
+                                ? kvp.Key.Replace(extensionPrefix, "") 
+                                : kvp.Key.Replace("extension_", "");
                             
                             // Try to find matching display name from available attributes
                             var matchingAttr = availableAttributes?.FirstOrDefault(a => a.Id == shortName);
@@ -269,6 +326,8 @@ namespace AADB2CExtensionModifier
                             var dataType = matchingAttr?.DataType?.ToString() ?? "String";
 
                             var value = kvp.Value?.ToString() ?? "";
+
+                            Debug.WriteLine($"Found extension attribute: {attributeName} = {value}");
 
                             var attrModel = new ExtensionAttributeModel
                             {
@@ -285,33 +344,23 @@ namespace AADB2CExtensionModifier
                     }
                 }
 
-                // Also check for standard extension attributes (extension_* without B2C app ID)
-                if (user.AdditionalData != null)
-                {
-                    foreach (var kvp in user.AdditionalData)
-                    {
-                        if (kvp.Key.StartsWith("extension_") && !kvp.Key.StartsWith($"extension_{_b2cExtensionAppId}_"))
-                        {
-                            var value = kvp.Value?.ToString() ?? "";
-                            var attrModel = new ExtensionAttributeModel
-                            {
-                                AttributeName = kvp.Key,
-                                DisplayName = kvp.Key.Replace("extension_", ""),
-                                DataType = "String",
-                                Value = value,
-                                OriginalValue = value
-                            };
-
-                            attrModel.PropertyChanged += Attribute_PropertyChanged;
-                            _extensionAttributes.Add(attrModel);
-                        }
-                    }
-                }
+                Debug.WriteLine($"Total extension attributes added to grid: {_extensionAttributes.Count}");
 
                 if (_extensionAttributes.Count == 0)
                 {
-                    MessageBox.Show("No extension attributes found for this user.",
-                        "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                    var message = "No extension attributes found for this user.";
+                    if (extensionPropertyNames == null || extensionPropertyNames.Count == 0)
+                    {
+                        message += "\n\nNo extension properties were discovered on the B2C extensions app. This could mean:\n" +
+                                  "- No extension attributes have been created yet\n" +
+                                  "- The application doesn't have permission to read the application registration";
+                    }
+                    else
+                    {
+                        message += $"\n\n{extensionPropertyNames.Count} extension properties were discovered, but the user doesn't have values for them.";
+                    }
+                    
+                    MessageBox.Show(message, "Information", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
 
                 UpdateSaveButtonState();
@@ -320,6 +369,8 @@ namespace AADB2CExtensionModifier
             catch (Exception ex)
             {
                 ShowLoading(false);
+                Debug.WriteLine($"Error in LoadExtensionAttributesAsync: {ex.Message}");
+                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
                 MessageBox.Show($"Error loading extension attributes:\n\n{ex.Message}",
                     "Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -442,6 +493,27 @@ namespace AADB2CExtensionModifier
                 MessageBox.Show($"Tenant domain updated to: {_tenantDomain}\n\nThis will be used for B2C identity searches.",
                     "Domain Updated", MessageBoxButton.OK, MessageBoxImage.Information);
             }
+        }
+    }
+    
+    // Helper class to redirect Console output to Debug output
+    public class DebugTextWriter : System.IO.TextWriter
+    {
+        public override Encoding Encoding => Encoding.UTF8;
+
+        public override void Write(char value)
+        {
+            Debug.Write(value);
+        }
+
+        public override void Write(string value)
+        {
+            Debug.Write(value);
+        }
+
+        public override void WriteLine(string value)
+        {
+            Debug.WriteLine(value);
         }
     }
 }
