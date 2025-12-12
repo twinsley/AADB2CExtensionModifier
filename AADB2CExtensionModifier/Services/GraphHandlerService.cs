@@ -96,30 +96,94 @@ namespace AADB2CExtensionModifier.Services
             }
         }
 
-        // This method gets the user's graph user object. It should take an email as input and return the user object.
-        public User GetGraphUser(string email, GraphServiceClient graphclient)
+        // This method gets the user's graph user object. It searches across all identity fields including B2C identities.
+        public User GetGraphUser(string email, GraphServiceClient graphclient, string tenantDomain = null)
         {
-            Console.WriteLine($"Getting user with email: {email}");
+            Console.WriteLine($"Getting user with email/identity: {email}");
             try
             {
+                // First, try searching by mail or userPrincipalName (works for standard Azure AD users)
                 UserCollectionResponse? users;
                 users = graphclient.Users.GetAsync(requestConfig =>
                 {
                     requestConfig.QueryParameters.Select =
-                        ["id", "displayName", "mail", "userPrincipalName"];
+                        ["id", "displayName", "mail", "userPrincipalName", "identities"];
                     requestConfig.QueryParameters.Filter =
                         $"mail eq '{email}' or userPrincipalName eq '{email}'";
                 }).Result;
 
-                if (users == null || users.Value == null || !users.Value.Any())
+                User user = users?.Value?.FirstOrDefault();
+                
+                if (user != null)
                 {
-                    Console.WriteLine($"User with email {email} not found");
-                    return null;
+                    Console.WriteLine($"User found via mail/UPN: {user.DisplayName}");
+                    return user;
                 }
 
-                User user = users.Value.FirstOrDefault();
-                Console.WriteLine($"User found: {user.DisplayName}");
-                return user;
+                // If tenant domain is provided, search by identities with issuer (B2C users)
+                if (!string.IsNullOrEmpty(tenantDomain))
+                {
+                    Console.WriteLine("User not found by mail/UPN, searching in identities with issuer...");
+                    users = graphclient.Users.GetAsync(requestConfig =>
+                    {
+                        requestConfig.QueryParameters.Select =
+                            ["id", "displayName", "mail", "userPrincipalName", "identities"];
+                        // Search for users where any identity issuerAssignedId matches the email with the specified issuer
+                        requestConfig.QueryParameters.Filter =
+                            $"identities/any(c:c/issuerAssignedId eq '{email}' and c/issuer eq '{tenantDomain}')";
+                    }).Result;
+
+                    user = users?.Value?.FirstOrDefault();
+
+                    if (user != null)
+                    {
+                        Console.WriteLine($"User found via identities: {user.DisplayName}");
+                        return user;
+                    }
+                }
+                else
+                {
+                    // If no tenant domain, try getting all users and search client-side by identities
+                    Console.WriteLine("User not found by mail/UPN, searching all users with identities (client-side filter)...");
+                    users = graphclient.Users.GetAsync(requestConfig =>
+                    {
+                        requestConfig.QueryParameters.Select =
+                            ["id", "displayName", "mail", "userPrincipalName", "identities"];
+                        requestConfig.QueryParameters.Top = 999;
+                    }).Result;
+
+                    user = users?.Value?.FirstOrDefault(u => 
+                        u.Identities != null && 
+                        u.Identities.Any(i => i.IssuerAssignedId != null && 
+                                             i.IssuerAssignedId.Equals(email, StringComparison.OrdinalIgnoreCase)));
+
+                    if (user != null)
+                    {
+                        Console.WriteLine($"User found via identities (client-side): {user.DisplayName}");
+                        return user;
+                    }
+                }
+
+                // If still not found, try a broader search with startswith (less efficient but more thorough)
+                Console.WriteLine("User not found by identities, trying broader search...");
+                users = graphclient.Users.GetAsync(requestConfig =>
+                {
+                    requestConfig.QueryParameters.Select =
+                        ["id", "displayName", "mail", "userPrincipalName", "identities"];
+                    requestConfig.QueryParameters.Filter =
+                        $"startswith(mail,'{email}') or startswith(userPrincipalName,'{email}')";
+                }).Result;
+
+                user = users?.Value?.FirstOrDefault();
+
+                if (user != null)
+                {
+                    Console.WriteLine($"User found via broader search: {user.DisplayName}");
+                    return user;
+                }
+
+                Console.WriteLine($"User with email/identity {email} not found");
+                return null;
             }
             catch (Exception ex)
             {
@@ -152,6 +216,46 @@ namespace AADB2CExtensionModifier.Services
             {
                 Console.WriteLine($"Error creating graph client: {ex.Message}");
                 throw;
+            }
+        }
+
+        // This method retrieves the verified domain for the tenant
+        public string GetTenantDomain(GraphServiceClient graphclient)
+        {
+            try
+            {
+                var organization = graphclient.Organization.GetAsync(requestConfig =>
+                {
+                    requestConfig.QueryParameters.Select = ["verifiedDomains"];
+                }).Result;
+
+                var org = organization?.Value?.FirstOrDefault();
+                if (org?.VerifiedDomains != null)
+                {
+                    // Try to find the default domain first
+                    var defaultDomain = org.VerifiedDomains.FirstOrDefault(d => d.IsDefault == true);
+                    if (defaultDomain != null)
+                    {
+                        Console.WriteLine($"Tenant domain (default): {defaultDomain.Name}");
+                        return defaultDomain.Name;
+                    }
+
+                    // Otherwise, return the first verified domain
+                    var firstDomain = org.VerifiedDomains.FirstOrDefault();
+                    if (firstDomain != null)
+                    {
+                        Console.WriteLine($"Tenant domain (first): {firstDomain.Name}");
+                        return firstDomain.Name;
+                    }
+                }
+
+                Console.WriteLine("No verified domain found for tenant");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting tenant domain: {ex.Message}");
+                return null;
             }
         }
     }

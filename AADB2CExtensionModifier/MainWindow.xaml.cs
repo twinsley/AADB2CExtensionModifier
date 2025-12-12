@@ -25,6 +25,7 @@ namespace AADB2CExtensionModifier
         private GraphHandlerService _graphService;
         private User _currentUser;
         private string _b2cExtensionAppId;
+        private string _tenantDomain;
         private ObservableCollection<ExtensionAttributeModel> _extensionAttributes;
 
         private readonly string[] _scopes = new[]
@@ -93,6 +94,34 @@ namespace AADB2CExtensionModifier
                 // Test the connection
                 var me = await _graphClient.Me.GetAsync();
 
+                // Get the tenant domain from Graph API
+                ShowLoading(true, "Retrieving tenant information...");
+                _tenantDomain = await Task.Run(() => _graphService.GetTenantDomain(_graphClient));
+
+                if (string.IsNullOrEmpty(_tenantDomain))
+                {
+                    // Fallback: try to construct from tenant ID if it's not a GUID
+                    if (!Guid.TryParse(tenantId, out _))
+                    {
+                        if (tenantId.Contains("."))
+                        {
+                            _tenantDomain = tenantId;
+                        }
+                        else
+                        {
+                            _tenantDomain = $"{tenantId}.onmicrosoft.com";
+                        }
+                        Console.WriteLine($"Using constructed tenant domain: {_tenantDomain}");
+                    }
+                    else
+                    {
+                        MessageBox.Show("Warning: Could not retrieve tenant domain from Graph API. You can manually edit it for B2C identity searches.",
+                            "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                }
+
+                TenantDomainTextBox.Text = _tenantDomain ?? "Not detected";
+
                 // Get B2C Extension App ID
                 ShowLoading(true, "Loading B2C configuration...");
                 _b2cExtensionAppId = await Task.Run(() => _graphService.GetB2cExtensionAppId(_graphClient));
@@ -108,12 +137,13 @@ namespace AADB2CExtensionModifier
 
                 LoginButton.IsEnabled = false;
                 LogoutButton.IsEnabled = true;
+                EditDomainButton.IsEnabled = true;
                 TenantIdTextBox.IsEnabled = false;
                 SearchGroupBox.IsEnabled = true;
 
                 ShowLoading(false);
 
-                MessageBox.Show($"Successfully authenticated!\n\nTenant: {tenantId}\nUser: {me.DisplayName}\nB2C Extension App ID: {_b2cExtensionAppId ?? "Not found"}",
+                MessageBox.Show($"Successfully authenticated!\n\nTenant: {tenantId}\nTenant Domain: {_tenantDomain ?? "Not detected"}\nUser: {me.DisplayName}\nB2C Extension App ID: {_b2cExtensionAppId ?? "Not found"}",
                     "Authentication Success", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -136,15 +166,21 @@ namespace AADB2CExtensionModifier
                 _graphClient = null;
                 _currentUser = null;
                 _b2cExtensionAppId = null;
+                _tenantDomain = null;
                 _extensionAttributes.Clear();
 
                 StatusTextBlock.Text = "Not connected";
                 StatusTextBlock.Foreground = Brushes.Gray;
                 SelectedUserTextBlock.Text = "None";
                 UserIdTextBlock.Text = "";
+                TenantDomainTextBox.Text = "";
+                TenantDomainTextBox.IsReadOnly = true;
+                TenantDomainTextBox.Background = new SolidColorBrush(Color.FromRgb(245, 245, 245));
+                EditDomainButton.Content = "Edit";
 
                 LoginButton.IsEnabled = true;
                 LogoutButton.IsEnabled = false;
+                EditDomainButton.IsEnabled = false;
                 TenantIdTextBox.IsEnabled = true;
                 SearchGroupBox.IsEnabled = false;
                 UserInfoGroupBox.IsEnabled = false;
@@ -157,7 +193,7 @@ namespace AADB2CExtensionModifier
         {
             if (string.IsNullOrWhiteSpace(UserEmailTextBox.Text))
             {
-                MessageBox.Show("Please enter a user email address.", "Validation Error",
+                MessageBox.Show("Please enter a user email or identity value.", "Validation Error",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -167,12 +203,13 @@ namespace AADB2CExtensionModifier
                 ShowLoading(true, "Searching for user...");
 
                 string email = UserEmailTextBox.Text.Trim();
-                var user = await Task.Run(() => _graphService.GetGraphUser(email, _graphClient));
+                var user = await Task.Run(() => _graphService.GetGraphUser(email, _graphClient, _tenantDomain));
 
                 if (user == null)
                 {
                     ShowLoading(false);
-                    MessageBox.Show($"No user found with email: {email}", "User Not Found",
+                    MessageBox.Show($"No user found with identity: {email}\n\nSearched in:\n- Email (mail)\n- User Principal Name\n- All identity values (B2C)", 
+                        "User Not Found",
                         MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
@@ -375,6 +412,36 @@ namespace AADB2CExtensionModifier
         private void AttributesDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             // Optional: Add logic for when a row is selected
+        }
+
+        private void EditDomainButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (TenantDomainTextBox.IsReadOnly)
+            {
+                TenantDomainTextBox.IsReadOnly = false;
+                TenantDomainTextBox.Background = Brushes.White;
+                EditDomainButton.Content = "Save";
+                TenantDomainTextBox.Focus();
+                TenantDomainTextBox.SelectAll();
+            }
+            else
+            {
+                var newDomain = TenantDomainTextBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(newDomain))
+                {
+                    MessageBox.Show("Tenant domain cannot be empty. For B2C identity searches, a valid domain is required.",
+                        "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                _tenantDomain = newDomain;
+                TenantDomainTextBox.IsReadOnly = true;
+                TenantDomainTextBox.Background = new SolidColorBrush(Color.FromRgb(245, 245, 245));
+                EditDomainButton.Content = "Edit";
+                
+                MessageBox.Show($"Tenant domain updated to: {_tenantDomain}\n\nThis will be used for B2C identity searches.",
+                    "Domain Updated", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
         }
     }
 }

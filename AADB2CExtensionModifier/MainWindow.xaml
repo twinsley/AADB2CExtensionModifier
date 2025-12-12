@@ -34,6 +34,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -46,9 +47,15 @@
                          ToolTip="Enter your Azure AD Tenant ID (e.g., contoso.onmicrosoft.com or GUID)"/>
                 <Button Grid.Row="0" Grid.Column="2" x:Name="LoginButton" Content="Login" Height="32" Margin="0,0,0,10" Click="LoginButton_Click"/>
 
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="Status:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
-                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="StatusTextBlock" Text="Not connected" VerticalAlignment="Center" Foreground="Gray"/>
-                <Button Grid.Row="1" Grid.Column="2" x:Name="LogoutButton" Content="Logout" Height="32" Click="LogoutButton_Click" IsEnabled="False"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Tenant Domain:" VerticalAlignment="Center" Margin="0,0,10,10" FontWeight="SemiBold"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="TenantDomainTextBox" Margin="0,0,10,10" Height="28" VerticalContentAlignment="Center" 
+                         IsReadOnly="True" Background="#F5F5F5"
+                         ToolTip="Auto-detected tenant domain (e.g., contoso.onmicrosoft.com). Click 'Edit' to override."/>
+                <Button Grid.Row="1" Grid.Column="2" x:Name="EditDomainButton" Content="Edit" Height="32" Margin="0,0,0,10" Click="EditDomainButton_Click" IsEnabled="False"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Status:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="StatusTextBlock" Text="Not connected" VerticalAlignment="Center" Foreground="Gray"/>
+                <Button Grid.Row="2" Grid.Column="2" x:Name="LogoutButton" Content="Logout" Height="32" Click="LogoutButton_Click" IsEnabled="False"/>
             </Grid>
         </GroupBox>
 
@@ -61,9 +68,9 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0" Text="Email:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="0" Text="Email/Identity:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
                 <TextBox Grid.Column="1" x:Name="UserEmailTextBox" Margin="0,0,10,0" Height="28" VerticalContentAlignment="Center"
-                         ToolTip="Enter user email address to search" KeyDown="UserEmailTextBox_KeyDown"/>
+                         ToolTip="Enter user email, UPN, or any identity value (supports B2C users)" KeyDown="UserEmailTextBox_KeyDown"/>
                 <Button Grid.Column="2" x:Name="SearchButton" Content="Search User" Height="32" Click="SearchButton_Click"/>
             </Grid>
         </GroupBox>
