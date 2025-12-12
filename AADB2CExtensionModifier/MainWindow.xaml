@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:AADB2CExtensionModifier"
         mc:Ignorable="d"
-        Title="Azure AD B2C Extension Attribute Manager" Height="750" Width="1100"
+        Title="Azure AD B2C User Attribute Manager" Height="750" Width="1100"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <Style TargetType="GroupBox">
@@ -95,82 +95,178 @@
             </Grid>
         </GroupBox>
 
-        <!-- Extension Attributes Section -->
-        <GroupBox Grid.Row="3" Header="Extension Attributes" Padding="10" IsEnabled="False" x:Name="AttributesGroupBox">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+        <!-- User Attributes Section with Tabs -->
+        <GroupBox Grid.Row="3" Header="User Attributes" Padding="10" IsEnabled="False" x:Name="AttributesGroupBox">
+            <TabControl x:Name="AttributeTabControl">
+                <!-- Standard Attributes Tab -->
+                <TabItem Header="Standard Attributes">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                <DataGrid Grid.Row="0" x:Name="AttributesDataGrid" 
-                          AutoGenerateColumns="False" 
-                          CanUserAddRows="False" 
-                          CanUserDeleteRows="False"
-                          SelectionMode="Single"
-                          AlternatingRowBackground="#F5F5F5"
-                          GridLinesVisibility="Horizontal"
-                          HorizontalGridLinesBrush="#DDDDDD"
-                          HeadersVisibility="Column"
-                          RowHeight="32"
-                          SelectionChanged="AttributesDataGrid_SelectionChanged">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Attribute Name" Binding="{Binding AttributeName}" Width="2.5*" IsReadOnly="True">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="FontFamily" Value="Consolas"/>
-                                    <Setter Property="FontSize" Value="11"/>
-                                    <Setter Property="VerticalAlignment" Value="Center"/>
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-                        <DataGridTextColumn Header="Display Name" Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="VerticalAlignment" Value="Center"/>
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-                        <DataGridTextColumn Header="Data Type" Binding="{Binding DataType}" Width="1*" IsReadOnly="True">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="VerticalAlignment" Value="Center"/>
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-                        <DataGridTextColumn Header="Current Value" Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Width="2.5*">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="VerticalAlignment" Value="Center"/>
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                            <DataGridTextColumn.EditingElementStyle>
-                                <Style TargetType="TextBox">
-                                    <Setter Property="VerticalAlignment" Value="Center"/>
-                                    <Setter Property="VerticalContentAlignment" Value="Center"/>
-                                </Style>
-                            </DataGridTextColumn.EditingElementStyle>
-                        </DataGridTextColumn>
-                    </DataGrid.Columns>
-                </DataGrid>
+                        <DataGrid Grid.Row="0" x:Name="StandardAttributesDataGrid" 
+                                  AutoGenerateColumns="False" 
+                                  CanUserAddRows="False" 
+                                  CanUserDeleteRows="False"
+                                  SelectionMode="Single"
+                                  AlternatingRowBackground="#F5F5F5"
+                                  GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="#DDDDDD"
+                                  HeadersVisibility="Column"
+                                  RowHeight="32">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Property Name" Binding="{Binding PropertyName}" Width="2*" IsReadOnly="True">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontFamily" Value="Consolas"/>
+                                            <Setter Property="FontSize" Value="11"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Display Name" Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Data Type" Binding="{Binding DataType}" Width="1*" IsReadOnly="True">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTemplateColumn Header="Current Value" Width="3*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Value}" VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="Black"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsReadOnly}" Value="True">
+                                                                <Setter Property="Foreground" Value="Gray"/>
+                                                                <Setter Property="FontStyle" Value="Italic"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                    <DataGridTemplateColumn.CellEditingTemplate>
+                                        <DataTemplate>
+                                            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" 
+                                                     VerticalAlignment="Center" 
+                                                     VerticalContentAlignment="Center"
+                                                     IsReadOnly="{Binding IsReadOnly}"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellEditingTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
 
-                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-                    <TextBlock x:Name="ModifiedCountTextBlock" Text="" VerticalAlignment="Center" Margin="0,0,15,0" Foreground="OrangeRed" FontWeight="SemiBold"/>
-                    <Button x:Name="RefreshButton" Content="Refresh" Height="32" Margin="0,0,10,0" Click="RefreshButton_Click"/>
-                    <Button x:Name="SaveButton" Content="Save Changes" Height="32" Click="SaveButton_Click" IsEnabled="False">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                <Style.Triggers>
-                                    <Trigger Property="IsEnabled" Value="True">
-                                        <Setter Property="Background" Value="#4CAF50"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </StackPanel>
-            </Grid>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                            <TextBlock x:Name="StandardModifiedCountTextBlock" Text="" VerticalAlignment="Center" Margin="0,0,15,0" Foreground="OrangeRed" FontWeight="SemiBold"/>
+                            <Button x:Name="StandardRefreshButton" Content="Refresh" Height="32" Margin="0,0,10,0" Click="StandardRefreshButton_Click"/>
+                            <Button x:Name="StandardSaveButton" Content="Save Changes" Height="32" Click="StandardSaveButton_Click" IsEnabled="False">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Background" Value="#4CAF50"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
+
+                <!-- Extension Attributes Tab -->
+                <TabItem Header="Extension Attributes">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <DataGrid Grid.Row="0" x:Name="AttributesDataGrid" 
+                                  AutoGenerateColumns="False" 
+                                  CanUserAddRows="False" 
+                                  CanUserDeleteRows="False"
+                                  SelectionMode="Single"
+                                  AlternatingRowBackground="#F5F5F5"
+                                  GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="#DDDDDD"
+                                  HeadersVisibility="Column"
+                                  RowHeight="32"
+                                  SelectionChanged="AttributesDataGrid_SelectionChanged">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Attribute Name" Binding="{Binding AttributeName}" Width="2.5*" IsReadOnly="True">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontFamily" Value="Consolas"/>
+                                            <Setter Property="FontSize" Value="11"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Display Name" Binding="{Binding DisplayName}" Width="2*" IsReadOnly="True">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Data Type" Binding="{Binding DataType}" Width="1*" IsReadOnly="True">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Current Value" Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Width="2.5*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                    <DataGridTextColumn.EditingElementStyle>
+                                        <Style TargetType="TextBox">
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.EditingElementStyle>
+                                </DataGridTextColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                            <TextBlock x:Name="ExtensionModifiedCountTextBlock" Text="" VerticalAlignment="Center" Margin="0,0,15,0" Foreground="OrangeRed" FontWeight="SemiBold"/>
+                            <Button x:Name="ExtensionRefreshButton" Content="Refresh" Height="32" Margin="0,0,10,0" Click="RefreshButton_Click"/>
+                            <Button x:Name="ExtensionSaveButton" Content="Save Changes" Height="32" Click="SaveButton_Click" IsEnabled="False">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Background" Value="#4CAF50"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
+            </TabControl>
         </GroupBox>
 
         <!-- Loading Overlay -->

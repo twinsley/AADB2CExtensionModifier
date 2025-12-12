@@ -28,6 +28,7 @@ namespace AADB2CExtensionModifier
         private string _b2cExtensionAppId;
         private string _tenantDomain;
         private ObservableCollection<ExtensionAttributeModel> _extensionAttributes;
+        private ObservableCollection<StandardAttributeModel> _standardAttributes;
 
         private readonly string[] _scopes = new[]
         {
@@ -49,12 +50,19 @@ namespace AADB2CExtensionModifier
             
             _graphService = new GraphHandlerService();
             _extensionAttributes = new ObservableCollection<ExtensionAttributeModel>();
+            _standardAttributes = new ObservableCollection<StandardAttributeModel>();
             AttributesDataGrid.ItemsSource = _extensionAttributes;
+            StandardAttributesDataGrid.ItemsSource = _standardAttributes;
 
             // Monitor for changes to enable Save button
             foreach (var attr in _extensionAttributes)
             {
                 attr.PropertyChanged += Attribute_PropertyChanged;
+            }
+            
+            foreach (var attr in _standardAttributes)
+            {
+                attr.PropertyChanged += StandardAttribute_PropertyChanged;
             }
         }
 
@@ -66,11 +74,26 @@ namespace AADB2CExtensionModifier
             }
         }
 
+        private void StandardAttribute_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(StandardAttributeModel.IsModified))
+            {
+                UpdateStandardSaveButtonState();
+            }
+        }
+
         private void UpdateSaveButtonState()
         {
             var modifiedCount = _extensionAttributes.Count(a => a.IsModified);
-            SaveButton.IsEnabled = modifiedCount > 0;
-            ModifiedCountTextBlock.Text = modifiedCount > 0 ? $"{modifiedCount} attribute(s) modified" : "";
+            ExtensionSaveButton.IsEnabled = modifiedCount > 0;
+            ExtensionModifiedCountTextBlock.Text = modifiedCount > 0 ? $"{modifiedCount} attribute(s) modified" : "";
+        }
+
+        private void UpdateStandardSaveButtonState()
+        {
+            var modifiedCount = _standardAttributes.Count(a => a.IsModified);
+            StandardSaveButton.IsEnabled = modifiedCount > 0;
+            StandardModifiedCountTextBlock.Text = modifiedCount > 0 ? $"{modifiedCount} attribute(s) modified" : "";
         }
 
         private void ShowLoading(bool show, string message = "Loading...")
@@ -173,6 +196,7 @@ namespace AADB2CExtensionModifier
                 _b2cExtensionAppId = null;
                 _tenantDomain = null;
                 _extensionAttributes.Clear();
+                _standardAttributes.Clear();
 
                 StatusTextBlock.Text = "Not connected";
                 StatusTextBlock.Foreground = Brushes.Gray;
@@ -190,7 +214,8 @@ namespace AADB2CExtensionModifier
                 SearchGroupBox.IsEnabled = false;
                 UserInfoGroupBox.IsEnabled = false;
                 AttributesGroupBox.IsEnabled = false;
-                SaveButton.IsEnabled = false;
+                ExtensionSaveButton.IsEnabled = false;
+                StandardSaveButton.IsEnabled = false;
             }
         }
 
@@ -226,8 +251,9 @@ namespace AADB2CExtensionModifier
                 UserInfoGroupBox.IsEnabled = true;
                 AttributesGroupBox.IsEnabled = true;
 
-                // Load extension attributes
+                // Load both extension and standard attributes
                 await LoadExtensionAttributesAsync();
+                await LoadStandardAttributesAsync();
 
                 ShowLoading(false);
             }
@@ -360,7 +386,7 @@ namespace AADB2CExtensionModifier
                         message += $"\n\n{extensionPropertyNames.Count} extension properties were discovered, but the user doesn't have values for them.";
                     }
                     
-                    MessageBox.Show(message, "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                    Debug.WriteLine(message);
                 }
 
                 UpdateSaveButtonState();
@@ -372,6 +398,88 @@ namespace AADB2CExtensionModifier
                 Debug.WriteLine($"Error in LoadExtensionAttributesAsync: {ex.Message}");
                 Debug.WriteLine($"Stack trace: {ex.StackTrace}");
                 MessageBox.Show($"Error loading extension attributes:\n\n{ex.Message}",
+                    "Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task LoadStandardAttributesAsync()
+        {
+            try
+            {
+                ShowLoading(true, "Loading standard attributes...");
+
+                _standardAttributes.Clear();
+
+                Debug.WriteLine($"Loading standard attributes for user with ID: {_currentUser.Id}");
+
+                // Get user with standard properties
+                var user = await _graphClient.Users[_currentUser.Id].GetAsync(config =>
+                {
+                    config.QueryParameters.Select = new[]
+                    {
+                        "id", "displayName", "givenName", "surname", "mail", "userPrincipalName",
+                        "mobilePhone", "businessPhones", "jobTitle", "department", "officeLocation",
+                        "streetAddress", "city", "state", "postalCode", "country",
+                        "companyName", "employeeId", "userType", "accountEnabled"
+                    };
+                });
+
+                // Define standard attributes with their metadata
+                var standardAttributeDefinitions = new List<(string PropertyName, string DisplayName, string DataType, Func<User, string> ValueGetter, bool IsReadOnly)>
+                {
+                    ("id", "User ID", "String", u => u.Id ?? "", true),
+                    ("displayName", "Display Name", "String", u => u.DisplayName ?? "", false),
+                    ("givenName", "Given Name", "String", u => u.GivenName ?? "", false),
+                    ("surname", "Surname", "String", u => u.Surname ?? "", false),
+                    ("mail", "Email", "String", u => u.Mail ?? "", false),
+                    ("userPrincipalName", "User Principal Name", "String", u => u.UserPrincipalName ?? "", false),
+                    ("mobilePhone", "Mobile Phone", "String", u => u.MobilePhone ?? "", false),
+                    ("businessPhones", "Business Phones", "StringCollection", u => u.BusinessPhones != null ? string.Join(", ", u.BusinessPhones) : "", false),
+                    ("jobTitle", "Job Title", "String", u => u.JobTitle ?? "", false),
+                    ("department", "Department", "String", u => u.Department ?? "", false),
+                    ("officeLocation", "Office Location", "String", u => u.OfficeLocation ?? "", false),
+                    ("streetAddress", "Street Address", "String", u => u.StreetAddress ?? "", false),
+                    ("city", "City", "String", u => u.City ?? "", false),
+                    ("state", "State", "String", u => u.State ?? "", false),
+                    ("postalCode", "Postal Code", "String", u => u.PostalCode ?? "", false),
+                    ("country", "Country", "String", u => u.Country ?? "", false),
+                    ("companyName", "Company Name", "String", u => u.CompanyName ?? "", false),
+                    ("employeeId", "Employee ID", "String", u => u.EmployeeId ?? "", false),
+                    ("userType", "User Type", "String", u => u.UserType ?? "", true),
+                    ("accountEnabled", "Account Enabled", "Boolean", u => u.AccountEnabled?.ToString() ?? "false", false)
+                };
+
+                foreach (var def in standardAttributeDefinitions)
+                {
+                    var value = def.ValueGetter(user);
+                    
+                    var attrModel = new StandardAttributeModel
+                    {
+                        PropertyName = def.PropertyName,
+                        DisplayName = def.DisplayName,
+                        DataType = def.DataType,
+                        Value = value,
+                        OriginalValue = value,
+                        IsReadOnly = def.IsReadOnly
+                    };
+
+                    attrModel.PropertyChanged += StandardAttribute_PropertyChanged;
+                    _standardAttributes.Add(attrModel);
+
+                    Debug.WriteLine($"Added standard attribute: {def.PropertyName} = {value}");
+                }
+
+                Debug.WriteLine($"Total standard attributes added: {_standardAttributes.Count}");
+
+                UpdateStandardSaveButtonState();
+                ShowLoading(false);
+            }
+            catch (Exception ex)
+            {
+                ShowLoading(false);
+                Debug.WriteLine($"Error in LoadStandardAttributesAsync: {ex.Message}");
+                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+                MessageBox.Show($"Error loading standard attributes:\n\n{ex.Message}",
                     "Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -432,6 +540,121 @@ namespace AADB2CExtensionModifier
             }
         }
 
+        private async void StandardSaveButton_Click(object sender, RoutedEventArgs e)
+        {
+            var modifiedAttributes = _standardAttributes.Where(a => a.IsModified).ToList();
+
+            if (modifiedAttributes.Count == 0)
+            {
+                MessageBox.Show("No changes to save.", "Information",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"Are you sure you want to save changes to {modifiedAttributes.Count} standard attribute(s)?",
+                "Confirm Save", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                ShowLoading(true, "Saving standard attribute changes...");
+
+                // Build the update object
+                var updateUser = new User();
+
+                foreach (var attr in modifiedAttributes)
+                {
+                    // Map property names to User object properties
+                    switch (attr.PropertyName)
+                    {
+                        case "displayName":
+                            updateUser.DisplayName = attr.Value;
+                            break;
+                        case "givenName":
+                            updateUser.GivenName = attr.Value;
+                            break;
+                        case "surname":
+                            updateUser.Surname = attr.Value;
+                            break;
+                        case "mail":
+                            updateUser.Mail = attr.Value;
+                            break;
+                        case "userPrincipalName":
+                            updateUser.UserPrincipalName = attr.Value;
+                            break;
+                        case "mobilePhone":
+                            updateUser.MobilePhone = attr.Value;
+                            break;
+                        case "businessPhones":
+                            updateUser.BusinessPhones = string.IsNullOrWhiteSpace(attr.Value) 
+                                ? new List<string>() 
+                                : attr.Value.Split(',').Select(p => p.Trim()).ToList();
+                            break;
+                        case "jobTitle":
+                            updateUser.JobTitle = attr.Value;
+                            break;
+                        case "department":
+                            updateUser.Department = attr.Value;
+                            break;
+                        case "officeLocation":
+                            updateUser.OfficeLocation = attr.Value;
+                            break;
+                        case "streetAddress":
+                            updateUser.StreetAddress = attr.Value;
+                            break;
+                        case "city":
+                            updateUser.City = attr.Value;
+                            break;
+                        case "state":
+                            updateUser.State = attr.Value;
+                            break;
+                        case "postalCode":
+                            updateUser.PostalCode = attr.Value;
+                            break;
+                        case "country":
+                            updateUser.Country = attr.Value;
+                            break;
+                        case "companyName":
+                            updateUser.CompanyName = attr.Value;
+                            break;
+                        case "employeeId":
+                            updateUser.EmployeeId = attr.Value;
+                            break;
+                        case "accountEnabled":
+                            if (bool.TryParse(attr.Value, out bool enabled))
+                            {
+                                updateUser.AccountEnabled = enabled;
+                            }
+                            break;
+                    }
+                }
+
+                // Update the user
+                await _graphClient.Users[_currentUser.Id].PatchAsync(updateUser);
+
+                // Reset modified flags
+                foreach (var attr in modifiedAttributes)
+                {
+                    attr.ResetOriginalValue();
+                }
+
+                UpdateStandardSaveButtonState();
+                ShowLoading(false);
+
+                MessageBox.Show($"Successfully updated {modifiedAttributes.Count} standard attribute(s)!",
+                    "Save Success", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                ShowLoading(false);
+                MessageBox.Show($"Error saving standard attribute changes:\n\n{ex.Message}",
+                    "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private async void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
             if (_currentUser == null)
@@ -450,6 +673,26 @@ namespace AADB2CExtensionModifier
             }
 
             await LoadExtensionAttributesAsync();
+        }
+
+        private async void StandardRefreshButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentUser == null)
+                return;
+
+            var hasChanges = _standardAttributes.Any(a => a.IsModified);
+
+            if (hasChanges)
+            {
+                var result = MessageBox.Show(
+                    "You have unsaved changes. Refreshing will discard them. Continue?",
+                    "Confirm Refresh", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+                if (result != MessageBoxResult.Yes)
+                    return;
+            }
+
+            await LoadStandardAttributesAsync();
         }
 
         private void UserEmailTextBox_KeyDown(object sender, KeyEventArgs e)
