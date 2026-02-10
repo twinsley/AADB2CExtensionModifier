@@ -24,6 +24,7 @@ namespace AADB2CExtensionModifier
     {
         private GraphServiceClient _graphClient;
         private GraphHandlerService _graphService;
+        private AppSettingsService _settingsService;
         private User _currentUser;
         private string _b2cExtensionAppId;
         private string _tenantDomain;
@@ -50,10 +51,14 @@ namespace AADB2CExtensionModifier
             Console.SetOut(new DebugTextWriter());
             
             _graphService = new GraphHandlerService();
+            _settingsService = new AppSettingsService();
             _extensionAttributes = new ObservableCollection<ExtensionAttributeModel>();
             _standardAttributes = new ObservableCollection<StandardAttributeModel>();
             AttributesDataGrid.ItemsSource = _extensionAttributes;
             StandardAttributesDataGrid.ItemsSource = _standardAttributes;
+
+            // Load saved settings
+            LoadSavedSettings();
 
             // Monitor for changes to enable Save button
             foreach (var attr in _extensionAttributes)
@@ -95,6 +100,35 @@ namespace AADB2CExtensionModifier
             var modifiedCount = _standardAttributes.Count(a => a.IsModified);
             StandardSaveButton.IsEnabled = modifiedCount > 0;
             StandardModifiedCountTextBlock.Text = modifiedCount > 0 ? $"{modifiedCount} attribute(s) modified" : "";
+        }
+
+        private void LoadSavedSettings()
+        {
+            var settings = _settingsService.LoadSettings();
+            
+            if (!string.IsNullOrEmpty(settings.TenantId))
+            {
+                TenantIdTextBox.Text = settings.TenantId;
+                Debug.WriteLine($"Loaded saved Tenant ID: {settings.TenantId}");
+            }
+            
+            if (!string.IsNullOrEmpty(settings.TenantDomain))
+            {
+                _tenantDomain = settings.TenantDomain;
+                TenantDomainTextBox.Text = settings.TenantDomain;
+                Debug.WriteLine($"Loaded saved Tenant Domain: {settings.TenantDomain}");
+            }
+        }
+
+        private void SaveSettings()
+        {
+            var settings = new AppSettingsService.AppSettings
+            {
+                TenantId = TenantIdTextBox.Text?.Trim() ?? string.Empty,
+                TenantDomain = _tenantDomain ?? string.Empty
+            };
+            
+            _settingsService.SaveSettings(settings);
         }
 
         private void ShowLoading(bool show, string message = "Loading...")
@@ -169,6 +203,9 @@ namespace AADB2CExtensionModifier
                 EditDomainButton.IsEnabled = true;
                 TenantIdTextBox.IsEnabled = false;
                 SearchGroupBox.IsEnabled = true;
+
+                // Save settings for next session
+                SaveSettings();
 
                 ShowLoading(false);
 
@@ -708,6 +745,9 @@ namespace AADB2CExtensionModifier
                 TenantDomainTextBox.IsReadOnly = true;
                 TenantDomainTextBox.Background = new SolidColorBrush(Color.FromRgb(245, 245, 245));
                 EditDomainButton.Content = "Edit";
+                
+                // Save updated settings
+                SaveSettings();
                 
                 MessageBox.Show($"Tenant domain updated to: {_tenantDomain}\n\nThis will be used for B2C identity searches.",
                     "Domain Updated", MessageBoxButton.OK, MessageBoxImage.Information);
