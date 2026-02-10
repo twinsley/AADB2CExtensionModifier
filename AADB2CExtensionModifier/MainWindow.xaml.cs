@@ -35,7 +35,8 @@ namespace AADB2CExtensionModifier
             "User.Read.All",
             "User.ReadWrite.All",
             "Application.Read.All",
-            "Directory.ReadWrite.All"
+            "Directory.ReadWrite.All",
+            "IdentityUserFlow.Read.All"
         };
 
         // Using Microsoft Graph Command Line Tools Client ID for interactive authentication
@@ -275,28 +276,15 @@ namespace AADB2CExtensionModifier
 
                 Debug.WriteLine($"Attempting to load user with ID: {_currentUser.Id}");
 
-                // First, discover what extension properties exist
-                List<string> extensionPropertyNames = null;
-                if (!string.IsNullOrEmpty(_b2cExtensionAppId))
+                if (string.IsNullOrEmpty(_b2cExtensionAppId))
                 {
-                    Debug.WriteLine("Discovering extension properties from B2C app...");
-                    extensionPropertyNames = await Task.Run(() => _graphService.GetB2cExtensionPropertyNames(_graphClient, _b2cExtensionAppId));
-                    Debug.WriteLine($"Discovered {extensionPropertyNames?.Count ?? 0} extension properties");
+                    Debug.WriteLine("B2C Extension App ID is not available. Cannot load extension attributes.");
+                    ShowLoading(false);
+                    return;
                 }
 
-                // Build the select query with base properties + extension properties
-                var selectProperties = new List<string> { "id", "displayName", "mail", "userPrincipalName" };
-                if (extensionPropertyNames != null && extensionPropertyNames.Count > 0)
-                {
-                    selectProperties.AddRange(extensionPropertyNames);
-                    Debug.WriteLine($"Requesting user with {selectProperties.Count} properties including {extensionPropertyNames.Count} extensions");
-                }
-
-                // Get user with explicit property selection
-                var user = await _graphClient.Users[_currentUser.Id].GetAsync(config =>
-                {
-                    config.QueryParameters.Select = selectProperties.ToArray();
-                });
+                // Use the service method which now handles null extension properties
+                var user = await _graphService.GetUserExtensionAttributesAsync(_currentUser.Id, _graphClient, _b2cExtensionAppId);
 
                 Debug.WriteLine($"User retrieved successfully");
                 Debug.WriteLine($"User.Mail: {user.Mail}");
@@ -311,7 +299,7 @@ namespace AADB2CExtensionModifier
                     {
                         if (!kvp.Key.StartsWith("@odata"))
                         {
-                            Debug.WriteLine($"  Key: {kvp.Key}, Value: {kvp.Value}");
+                            Debug.WriteLine($"  Key: {kvp.Key}, Value: {kvp.Value ?? "NULL"}");
                         }
                     }
                 }
@@ -332,7 +320,7 @@ namespace AADB2CExtensionModifier
                 Debug.WriteLine($"Available attributes count: {availableAttributes?.Count ?? 0}");
 
                 // Process extension attributes from AdditionalData
-                if (user.AdditionalData != null && !string.IsNullOrEmpty(_b2cExtensionAppId))
+                if (user.AdditionalData != null)
                 {
                     var extensionPrefix = $"extension_{_b2cExtensionAppId}_";
                     Debug.WriteLine($"Looking for extension attributes with prefix: {extensionPrefix}");
@@ -353,7 +341,7 @@ namespace AADB2CExtensionModifier
 
                             var value = kvp.Value?.ToString() ?? "";
 
-                            Debug.WriteLine($"Found extension attribute: {attributeName} = {value}");
+                            Debug.WriteLine($"Found extension attribute: {attributeName} = {value} (null: {kvp.Value == null})");
 
                             var attrModel = new ExtensionAttributeModel
                             {
@@ -374,19 +362,7 @@ namespace AADB2CExtensionModifier
 
                 if (_extensionAttributes.Count == 0)
                 {
-                    var message = "No extension attributes found for this user.";
-                    if (extensionPropertyNames == null || extensionPropertyNames.Count == 0)
-                    {
-                        message += "\n\nNo extension properties were discovered on the B2C extensions app. This could mean:\n" +
-                                  "- No extension attributes have been created yet\n" +
-                                  "- The application doesn't have permission to read the application registration";
-                    }
-                    else
-                    {
-                        message += $"\n\n{extensionPropertyNames.Count} extension properties were discovered, but the user doesn't have values for them.";
-                    }
-                    
-                    Debug.WriteLine(message);
+                    Debug.WriteLine("No extension attributes found in AdditionalData after processing.");
                 }
 
                 UpdateSaveButtonState();

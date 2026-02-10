@@ -77,11 +77,40 @@ namespace AADB2CExtensionModifier.Services
         {
             try
             {
-                // Get user with all properties including extension attributes
+                // Get the list of extension property names to explicitly request them
+                var extensionPropertyNames = GetB2cExtensionPropertyNames(graphclient, b2cExtensionAppId);
+                
+                // Build the select list with all standard properties (*) and all extension properties
+                var selectProperties = new List<string> { "*" };
+                selectProperties.AddRange(extensionPropertyNames);
+                
+                Debug.WriteLine($"Requesting user with all standard properties and {extensionPropertyNames.Count} extension properties explicitly");
+
+                // Get user with all standard properties and explicitly requested extension attributes
                 var user = await graphclient.Users[userIdentifier].GetAsync(requestConfig =>
                 {
-                    requestConfig.QueryParameters.Select = new[] { "*" };
+                    requestConfig.QueryParameters.Select = selectProperties.ToArray();
                 });
+
+                // Microsoft Graph doesn't return extension properties that have never been set, even when explicitly requested
+                // Manually add missing extension properties with null values
+                if (user != null)
+                {
+                    user.AdditionalData ??= new Dictionary<string, object>();
+                    
+                    int addedCount = 0;
+                    foreach (var extensionPropertyName in extensionPropertyNames)
+                    {
+                        if (!user.AdditionalData.ContainsKey(extensionPropertyName))
+                        {
+                            user.AdditionalData[extensionPropertyName] = null;
+                            addedCount++;
+                            Debug.WriteLine($"Added missing extension property with null value: {extensionPropertyName}");
+                        }
+                    }
+                    
+                    Debug.WriteLine($"Added {addedCount} missing extension properties as null");
+                }
 
                 return user;
             }
