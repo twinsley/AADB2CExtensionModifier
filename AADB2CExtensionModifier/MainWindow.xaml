@@ -85,6 +85,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Selected User:" VerticalAlignment="Center" Margin="0,0,10,5" FontWeight="Bold"/>
@@ -92,6 +93,10 @@
                 
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="User ID:" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
                 <TextBlock Grid.Row="1" Grid.Column="1" x:Name="UserIdTextBlock" Text="" VerticalAlignment="Center" Foreground="Gray" FontFamily="Consolas" FontSize="11"/>
+                
+                <Button Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" x:Name="DeleteUserButton" Content="Delete User" Height="32" Click="DeleteUserButton_Click" 
+                        Background="#DC3545" Foreground="White" FontWeight="SemiBold" Margin="10,0,0,0"
+                        ToolTip="Permanently delete this user from Azure AD B2C"/>
             </Grid>
         </GroupBox>
 

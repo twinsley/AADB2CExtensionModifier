@@ -141,6 +141,22 @@ namespace AADB2CExtensionModifier.Services
             }
         }
 
+        // This method deletes a user from Azure AD B2C.
+        public async Task DeleteUserAsync(string userIdentifier, GraphServiceClient graphclient)
+        {
+            try
+            {
+                Debug.WriteLine($"Attempting to delete user with ID: {userIdentifier}");
+                await graphclient.Users[userIdentifier].DeleteAsync();
+                Debug.WriteLine($"Successfully deleted user: {userIdentifier}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error deleting user: {ex.Message}");
+                throw;
+            }
+        }
+
         // This method gets the user's graph user object. It searches across all identity fields including B2C identities.
         public User GetGraphUser(string email, GraphServiceClient graphclient, string tenantDomain = null)
         {

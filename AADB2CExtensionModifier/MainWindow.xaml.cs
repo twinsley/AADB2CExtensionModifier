@@ -713,6 +713,73 @@ namespace AADB2CExtensionModifier
                     "Domain Updated", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
+
+        private async void DeleteUserButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentUser == null)
+            {
+                MessageBox.Show("No user is currently selected.", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"Are you sure you want to PERMANENTLY DELETE this user?\n\n" +
+                $"User: {_currentUser.DisplayName}\n" +
+                $"Email: {_currentUser.Mail ?? _currentUser.UserPrincipalName}\n" +
+                $"User ID: {_currentUser.Id}\n\n" +
+                $"This action CANNOT be undone!",
+                "Confirm User Deletion",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result != MessageBoxResult.Yes)
+                return;
+
+            // Double confirmation for safety
+            var doubleConfirm = MessageBox.Show(
+                "This is your FINAL confirmation. The user will be permanently deleted.\n\nProceed with deletion?",
+                "Final Confirmation",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Stop);
+
+            if (doubleConfirm != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                ShowLoading(true, "Deleting user...");
+
+                await _graphService.DeleteUserAsync(_currentUser.Id, _graphClient);
+
+                ShowLoading(false);
+
+                MessageBox.Show(
+                    $"User '{_currentUser.DisplayName}' has been successfully deleted from Azure AD B2C.",
+                    "User Deleted",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                // Clear the current user and reset UI
+                _currentUser = null;
+                _extensionAttributes.Clear();
+                _standardAttributes.Clear();
+                SelectedUserTextBlock.Text = "None";
+                UserIdTextBlock.Text = "";
+                UserInfoGroupBox.IsEnabled = false;
+                AttributesGroupBox.IsEnabled = false;
+                UserEmailTextBox.Clear();
+            }
+            catch (Exception ex)
+            {
+                ShowLoading(false);
+                MessageBox.Show(
+                    $"Error deleting user:\n\n{ex.Message}",
+                    "Delete Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
     }
     
     // Helper class to redirect Console output to Debug output
