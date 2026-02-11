@@ -7,9 +7,9 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="b1492809-a26a-4998-a507-d07227f0ebb7"
-    Publisher="CN=TimDev"
-    Version="1.0.0.0" />
+    Name="TWinsley.AADB2CUserManager"
+    Publisher="CN=E83C372B-4B43-439E-96B0-DB0EB4B0E3FA"
+    Version="1.0.7.0" />
 
   <Properties>
     <DisplayName>AAD B2C User Manager</DisplayName>

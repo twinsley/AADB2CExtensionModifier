@@ -115,7 +115,6 @@ namespace AADB2CExtensionModifier
             if (!string.IsNullOrEmpty(settings.TenantDomain))
             {
                 _tenantDomain = settings.TenantDomain;
-                TenantDomainTextBox.Text = settings.TenantDomain;
                 Debug.WriteLine($"Loaded saved Tenant Domain: {settings.TenantDomain}");
             }
         }
