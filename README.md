@@ -33,7 +33,6 @@ The application requests the following Microsoft Graph API permissions:
 1. Launch the application
 2. Enter your **Tenant ID** in the format:
    - GUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
-   - Domain format: `contoso.onmicrosoft.com`
 3. Click **Login**
 4. A browser window will open - complete the authentication process
 5. Select your tenant in the authentication dialog if prompted
