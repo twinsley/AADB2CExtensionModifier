@@ -1,6 +1,6 @@
 # Azure AD B2C Extension Attribute Manager
 
-A WPF desktop application for managing users in Microsoft Entra (Azure AD B2C), with support for viewing and updating extension attributes.
+A WPF desktop application for managing users in Microsoft Entra (Azure AD B2C), with support for viewing and updating extension attributes. It can be found here in the Windows App Store https://apps.microsoft.com/detail/9mxx2kf7xtt8?hl=en-US&gl=US for ease of install.
 
 ## Features
 
@@ -24,6 +24,7 @@ The application requests the following Microsoft Graph API permissions:
 - `User.ReadWrite.All` - Read and write all users
 - `Application.Read.All` - Read application registrations (for B2C extension app detection)
 - `Directory.ReadWrite.All` - Read and write directory data
+- `IdentityUserFlow.Read.All` - Read Authentication Flows (for extension attributes)
 
 ## How to Use
 
