@@ -30,6 +30,10 @@ namespace AADB2CExtensionModifier
         private string _tenantDomain;
         private ObservableCollection<ExtensionAttributeModel> _extensionAttributes;
         private ObservableCollection<StandardAttributeModel> _standardAttributes;
+        private ObservableCollection<SignInLogModel> _signInLogs;
+        private ObservableCollection<AuditLogModel> _auditLogs;
+        private string _signInLogsNextPageLink;
+        private string _auditLogsNextPageLink;
 
         private readonly string[] _scopes = new[]
         {
@@ -37,7 +41,8 @@ namespace AADB2CExtensionModifier
             "User.ReadWrite.All",
             "Application.Read.All",
             "Directory.ReadWrite.All",
-            "IdentityUserFlow.Read.All"
+            "IdentityUserFlow.Read.All",
+            "AuditLog.Read.All"
         };
 
         // Using Microsoft Graph Command Line Tools Client ID for interactive authentication
@@ -54,8 +59,12 @@ namespace AADB2CExtensionModifier
             _settingsService = new AppSettingsService();
             _extensionAttributes = new ObservableCollection<ExtensionAttributeModel>();
             _standardAttributes = new ObservableCollection<StandardAttributeModel>();
+            _signInLogs = new ObservableCollection<SignInLogModel>();
+            _auditLogs = new ObservableCollection<AuditLogModel>();
             AttributesDataGrid.ItemsSource = _extensionAttributes;
             StandardAttributesDataGrid.ItemsSource = _standardAttributes;
+            SignInLogsDataGrid.ItemsSource = _signInLogs;
+            AuditLogsDataGrid.ItemsSource = _auditLogs;
 
             // Monitor for changes to enable Save button
             foreach (var attr in _extensionAttributes)
@@ -153,7 +162,7 @@ namespace AADB2CExtensionModifier
         {
             if (string.IsNullOrWhiteSpace(TenantIdTextBox.Text))
             {
-                MessageBox.Show("Please enter a Tenant ID.", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please enter a tenant ID, domain, or short name.", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -161,7 +170,15 @@ namespace AADB2CExtensionModifier
             {
                 ShowLoading(true, "Authenticating...");
 
-                string tenantId = TenantIdTextBox.Text.Trim();
+                string tenantInput = TenantIdTextBox.Text.Trim();
+
+                // Normalize: if not a GUID and not already a domain, append .onmicrosoft.com
+                string tenantId = tenantInput;
+                if (!Guid.TryParse(tenantInput, out _) && !tenantInput.Contains('.'))
+                {
+                    tenantId = $"{tenantInput}.onmicrosoft.com";
+                    Debug.WriteLine($"Normalized tenant input '{tenantInput}' to '{tenantId}'");
+                }
 
                 // Create Graph client with interactive authentication
                 _graphClient = await Task.Run(() => _graphService.GetGraphClient(tenantId, DefaultClientId, _scopes));
@@ -175,18 +192,11 @@ namespace AADB2CExtensionModifier
 
                 if (string.IsNullOrEmpty(_tenantDomain))
                 {
-                    // Fallback: try to construct from tenant ID if it's not a GUID
+                    // Fallback: use the normalized tenant input if it looks like a domain
                     if (!Guid.TryParse(tenantId, out _))
                     {
-                        if (tenantId.Contains("."))
-                        {
-                            _tenantDomain = tenantId;
-                        }
-                        else
-                        {
-                            _tenantDomain = $"{tenantId}.onmicrosoft.com";
-                        }
-                        Console.WriteLine($"Using constructed tenant domain: {_tenantDomain}");
+                        _tenantDomain = tenantId;
+                        Console.WriteLine($"Using tenant input as domain: {_tenantDomain}");
                     }
                     else
                     {
@@ -227,7 +237,7 @@ namespace AADB2CExtensionModifier
             catch (Exception ex)
             {
                 ShowLoading(false);
-                MessageBox.Show($"Authentication failed:\n\n{ex.Message}",
+                MessageBox.Show($"Authentication failed:\n\n{ex.Message}\n\nEnsure the tenant value is a valid GUID, domain (contoso.onmicrosoft.com), or short name (contoso).",
                     "Authentication Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 StatusTextBlock.Text = "Authentication failed";
                 StatusTextBlock.Foreground = Brushes.Red;
@@ -247,6 +257,14 @@ namespace AADB2CExtensionModifier
                 _tenantDomain = null;
                 _extensionAttributes.Clear();
                 _standardAttributes.Clear();
+                _signInLogs.Clear();
+                _auditLogs.Clear();
+                _signInLogsNextPageLink = null;
+                _auditLogsNextPageLink = null;
+                SignInLogCountTextBlock.Text = "";
+                AuditLogCountTextBlock.Text = "";
+                LoadMoreSignInLogsButton.Visibility = Visibility.Collapsed;
+                LoadMoreAuditLogsButton.Visibility = Visibility.Collapsed;
 
                 StatusTextBlock.Text = "Not connected";
                 StatusTextBlock.Foreground = Brushes.Gray;
@@ -300,6 +318,16 @@ namespace AADB2CExtensionModifier
 
                 UserInfoGroupBox.IsEnabled = true;
                 AttributesGroupBox.IsEnabled = true;
+
+                // Clear previous log data for new user
+                _signInLogs.Clear();
+                _auditLogs.Clear();
+                _signInLogsNextPageLink = null;
+                _auditLogsNextPageLink = null;
+                SignInLogCountTextBlock.Text = "";
+                AuditLogCountTextBlock.Text = "";
+                LoadMoreSignInLogsButton.Visibility = Visibility.Collapsed;
+                LoadMoreAuditLogsButton.Visibility = Visibility.Collapsed;
 
                 // Load both extension and standard attributes
                 await LoadExtensionAttributesAsync();
@@ -731,6 +759,174 @@ namespace AADB2CExtensionModifier
         private void AttributesDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             // Optional: Add logic for when a row is selected
+        }
+
+        private void SignInLogsUtcCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            bool useUtc = SignInLogsUtcCheckBox.IsChecked == true;
+            int index = SignInLogsDataGrid.Columns.IndexOf(SignInDateTimeColumn);
+            var style = SignInDateTimeColumn.ElementStyle;
+            var width = SignInDateTimeColumn.Width;
+
+            SignInLogsDataGrid.Columns.RemoveAt(index);
+            SignInDateTimeColumn = new DataGridTextColumn
+            {
+                Header = useUtc ? "Date/Time (UTC)" : "Date/Time (Local)",
+                Binding = new Binding(useUtc ? "CreatedDateTimeUtc" : "CreatedDateTimeLocal"),
+                Width = width,
+                ElementStyle = style,
+                IsReadOnly = true
+            };
+            SignInLogsDataGrid.Columns.Insert(index, SignInDateTimeColumn);
+        }
+
+        private void AuditLogsUtcCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            bool useUtc = AuditLogsUtcCheckBox.IsChecked == true;
+            int index = AuditLogsDataGrid.Columns.IndexOf(AuditDateTimeColumn);
+            var style = AuditDateTimeColumn.ElementStyle;
+            var width = AuditDateTimeColumn.Width;
+
+            AuditLogsDataGrid.Columns.RemoveAt(index);
+            AuditDateTimeColumn = new DataGridTextColumn
+            {
+                Header = useUtc ? "Date/Time (UTC)" : "Date/Time (Local)",
+                Binding = new Binding(useUtc ? "ActivityDateTimeUtc" : "ActivityDateTimeLocal"),
+                Width = width,
+                ElementStyle = style,
+                IsReadOnly = true
+            };
+            AuditLogsDataGrid.Columns.Insert(index, AuditDateTimeColumn);
+        }
+
+        private async void LoadSignInLogsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentUser == null)
+                return;
+
+            try
+            {
+                ShowLoading(true, "Loading sign-in logs...");
+
+                _signInLogs.Clear();
+                _signInLogsNextPageLink = null;
+
+                var page = await _graphService.GetUserSignInLogsPageAsync(_currentUser.Id, _graphClient);
+                foreach (var log in page.Items)
+                    _signInLogs.Add(log);
+
+                _signInLogsNextPageLink = page.NextPageLink;
+                LoadMoreSignInLogsButton.Visibility = page.HasMorePages ? Visibility.Visible : Visibility.Collapsed;
+                SignInLogCountTextBlock.Text = $"{_signInLogs.Count} sign-in log(s) loaded{(page.HasMorePages ? " (more available)" : "")}";
+
+                ShowLoading(false);
+
+                if (_signInLogs.Count == 0)
+                {
+                    MessageBox.Show("No sign-in logs found for this user.\n\nNote: Sign-in logs require Azure AD Premium P1/P2 and are retained for 7-30 days depending on license.",
+                        "No Logs Found", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowLoading(false);
+                Debug.WriteLine($"Error loading sign-in logs: {ex.Message}");
+                MessageBox.Show($"Error loading sign-in logs:\n\n{ex.Message}\n\nNote: This feature requires the AuditLog.Read.All permission and Azure AD Premium P1/P2.",
+                    "Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void LoadMoreSignInLogsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentUser == null || string.IsNullOrEmpty(_signInLogsNextPageLink))
+                return;
+
+            try
+            {
+                ShowLoading(true, "Loading more sign-in logs...");
+
+                var page = await _graphService.GetUserSignInLogsPageAsync(_currentUser.Id, _graphClient, nextPageLink: _signInLogsNextPageLink);
+                foreach (var log in page.Items)
+                    _signInLogs.Add(log);
+
+                _signInLogsNextPageLink = page.NextPageLink;
+                LoadMoreSignInLogsButton.Visibility = page.HasMorePages ? Visibility.Visible : Visibility.Collapsed;
+                SignInLogCountTextBlock.Text = $"{_signInLogs.Count} sign-in log(s) loaded{(page.HasMorePages ? " (more available)" : "")}";
+
+                ShowLoading(false);
+            }
+            catch (Exception ex)
+            {
+                ShowLoading(false);
+                Debug.WriteLine($"Error loading more sign-in logs: {ex.Message}");
+                MessageBox.Show($"Error loading more sign-in logs:\n\n{ex.Message}",
+                    "Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void LoadAuditLogsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentUser == null)
+                return;
+
+            try
+            {
+                ShowLoading(true, "Loading audit logs...");
+
+                _auditLogs.Clear();
+                _auditLogsNextPageLink = null;
+
+                var page = await _graphService.GetUserAuditLogsPageAsync(_currentUser.Id, _graphClient);
+                foreach (var log in page.Items)
+                    _auditLogs.Add(log);
+
+                _auditLogsNextPageLink = page.NextPageLink;
+                LoadMoreAuditLogsButton.Visibility = page.HasMorePages ? Visibility.Visible : Visibility.Collapsed;
+                AuditLogCountTextBlock.Text = $"{_auditLogs.Count} audit log(s) loaded{(page.HasMorePages ? " (more available)" : "")}";
+
+                ShowLoading(false);
+
+                if (_auditLogs.Count == 0)
+                {
+                    MessageBox.Show("No audit logs found for this user.\n\nNote: Audit logs require Azure AD Premium P1/P2 and are retained for 7-30 days depending on license.",
+                        "No Logs Found", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowLoading(false);
+                Debug.WriteLine($"Error loading audit logs: {ex.Message}");
+                MessageBox.Show($"Error loading audit logs:\n\n{ex.Message}\n\nNote: This feature requires the AuditLog.Read.All permission and Azure AD Premium P1/P2.",
+                    "Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void LoadMoreAuditLogsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentUser == null || string.IsNullOrEmpty(_auditLogsNextPageLink))
+                return;
+
+            try
+            {
+                ShowLoading(true, "Loading more audit logs...");
+
+                var page = await _graphService.GetUserAuditLogsPageAsync(_currentUser.Id, _graphClient, nextPageLink: _auditLogsNextPageLink);
+                foreach (var log in page.Items)
+                    _auditLogs.Add(log);
+
+                _auditLogsNextPageLink = page.NextPageLink;
+                LoadMoreAuditLogsButton.Visibility = page.HasMorePages ? Visibility.Visible : Visibility.Collapsed;
+                AuditLogCountTextBlock.Text = $"{_auditLogs.Count} audit log(s) loaded{(page.HasMorePages ? " (more available)" : "")}";
+
+                ShowLoading(false);
+            }
+            catch (Exception ex)
+            {
+                ShowLoading(false);
+                Debug.WriteLine($"Error loading more audit logs: {ex.Message}");
+                MessageBox.Show($"Error loading more audit logs:\n\n{ex.Message}",
+                    "Load Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void EditDomainButton_Click(object sender, RoutedEventArgs e)

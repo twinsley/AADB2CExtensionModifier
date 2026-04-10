@@ -2,6 +2,7 @@
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.IdentityModel.Tokens;
+using AADB2CExtensionModifier.Models;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -388,6 +389,187 @@ namespace AADB2CExtensionModifier.Services
             }
 
             return extensionProperties;
+        }
+
+        // Result type for paginated log queries
+        public class PagedResult<T>
+        {
+            public List<T> Items { get; set; } = [];
+            public string NextPageLink { get; set; }
+            public bool HasMorePages => !string.IsNullOrEmpty(NextPageLink);
+        }
+
+        // This method retrieves a single page of sign-in logs for a specific user.
+        public async Task<PagedResult<SignInLogModel>> GetUserSignInLogsPageAsync(string userId, GraphServiceClient graphclient, int pageSize = 50, string nextPageLink = null)
+        {
+            var result = new PagedResult<SignInLogModel>();
+            try
+            {
+                Debug.WriteLine($"Retrieving sign-in logs page for user: {userId} (nextPageLink: {(nextPageLink != null ? "yes" : "no")})");
+
+                SignInCollectionResponse response;
+                if (!string.IsNullOrEmpty(nextPageLink))
+                {
+                    response = await graphclient.AuditLogs.SignIns
+                        .WithUrl(nextPageLink)
+                        .GetAsync();
+                }
+                else
+                {
+                    response = await graphclient.AuditLogs.SignIns.GetAsync(requestConfig =>
+                    {
+                        requestConfig.QueryParameters.Filter = $"userId eq '{userId}'";
+                        requestConfig.QueryParameters.Top = pageSize;
+                        requestConfig.QueryParameters.Orderby = ["createdDateTime desc"];
+                    });
+                }
+
+                if (response?.Value != null)
+                {
+                    foreach (var signIn in response.Value)
+                    {
+                        var locationParts = new List<string>();
+                        if (!string.IsNullOrEmpty(signIn.Location?.City))
+                            locationParts.Add(signIn.Location.City);
+                        if (!string.IsNullOrEmpty(signIn.Location?.State))
+                            locationParts.Add(signIn.Location.State);
+                        if (!string.IsNullOrEmpty(signIn.Location?.CountryOrRegion))
+                            locationParts.Add(signIn.Location.CountryOrRegion);
+
+                        var status = signIn.Status?.ErrorCode == 0 ? "Success" : "Failure";
+                        var failureReason = signIn.Status?.FailureReason ?? "";
+                        var additionalDetails = signIn.Status?.AdditionalDetails ?? "";
+                        var errorCode = signIn.Status?.ErrorCode?.ToString() ?? "";
+
+                        var localTime = signIn.CreatedDateTime?.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss") ?? "";
+                        var utcTime = signIn.CreatedDateTime?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") ?? "";
+
+                        result.Items.Add(new SignInLogModel
+                        {
+                            CreatedDateTime = localTime,
+                            CreatedDateTimeLocal = localTime,
+                            CreatedDateTimeUtc = utcTime,
+                            UserDisplayName = signIn.UserDisplayName ?? "",
+                            AppDisplayName = signIn.AppDisplayName ?? "",
+                            IpAddress = signIn.IpAddress ?? "",
+                            Location = string.Join(", ", locationParts),
+                            Status = status,
+                            ErrorCode = errorCode,
+                            FailureReason = failureReason,
+                            AdditionalDetails = additionalDetails,
+                            ConditionalAccessStatus = signIn.ConditionalAccessStatus?.ToString() ?? "",
+                            RiskDetail = signIn.RiskDetail?.ToString() ?? "",
+                            RiskLevel = signIn.RiskLevelDuringSignIn?.ToString() ?? "",
+                            ClientAppUsed = signIn.ClientAppUsed ?? "",
+                            ResourceDisplayName = signIn.ResourceDisplayName ?? ""
+                        });
+                    }
+                }
+
+                result.NextPageLink = response?.OdataNextLink;
+                Debug.WriteLine($"Retrieved {result.Items.Count} sign-in logs this page (has more: {result.HasMorePages})");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error getting sign-in logs: {ex.Message}");
+                throw;
+            }
+            return result;
+        }
+
+        // This method retrieves a single page of audit logs for a specific user.
+        public async Task<PagedResult<AuditLogModel>> GetUserAuditLogsPageAsync(string userId, GraphServiceClient graphclient, int pageSize = 50, string nextPageLink = null)
+        {
+            var result = new PagedResult<AuditLogModel>();
+            try
+            {
+                Debug.WriteLine($"Retrieving audit logs page for user: {userId} (nextPageLink: {(nextPageLink != null ? "yes" : "no")})");
+
+                DirectoryAuditCollectionResponse response;
+                if (!string.IsNullOrEmpty(nextPageLink))
+                {
+                    response = await graphclient.AuditLogs.DirectoryAudits
+                        .WithUrl(nextPageLink)
+                        .GetAsync();
+                }
+                else
+                {
+                    response = await graphclient.AuditLogs.DirectoryAudits.GetAsync(requestConfig =>
+                    {
+                        requestConfig.QueryParameters.Filter = $"targetResources/any(t:t/id eq '{userId}')";
+                        requestConfig.QueryParameters.Top = pageSize;
+                        requestConfig.QueryParameters.Orderby = ["activityDateTime desc"];
+                    });
+                }
+
+                if (response?.Value != null)
+                {
+                    foreach (var audit in response.Value)
+                    {
+                        var initiator = audit.InitiatedBy?.User?.UserPrincipalName
+                            ?? audit.InitiatedBy?.User?.DisplayName
+                            ?? audit.InitiatedBy?.App?.DisplayName
+                            ?? "System";
+
+                        var targets = audit.TargetResources != null
+                            ? string.Join(", ", audit.TargetResources
+                                .Where(t => !string.IsNullOrEmpty(t.DisplayName) || !string.IsNullOrEmpty(t.UserPrincipalName))
+                                .Select(t => t.DisplayName ?? t.UserPrincipalName ?? t.Id))
+                            : "";
+
+                        // Extract modified properties from target resources
+                        var modifiedProps = new List<string>();
+                        if (audit.TargetResources != null)
+                        {
+                            foreach (var target in audit.TargetResources)
+                            {
+                                if (target.ModifiedProperties != null)
+                                {
+                                    foreach (var prop in target.ModifiedProperties)
+                                    {
+                                        if (!string.IsNullOrEmpty(prop.DisplayName))
+                                        {
+                                            var oldVal = prop.OldValue?.Trim('"', '[', ']') ?? "";
+                                            var newVal = prop.NewValue?.Trim('"', '[', ']') ?? "";
+                                            if (!string.IsNullOrEmpty(oldVal) || !string.IsNullOrEmpty(newVal))
+                                                modifiedProps.Add($"{prop.DisplayName}: '{oldVal}' → '{newVal}'");
+                                            else
+                                                modifiedProps.Add(prop.DisplayName);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        var localTime = audit.ActivityDateTime?.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss") ?? "";
+                        var utcTime = audit.ActivityDateTime?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") ?? "";
+
+                        result.Items.Add(new AuditLogModel
+                        {
+                            ActivityDateTime = localTime,
+                            ActivityDateTimeLocal = localTime,
+                            ActivityDateTimeUtc = utcTime,
+                            ActivityDisplayName = audit.ActivityDisplayName ?? "",
+                            Category = audit.Category ?? "",
+                            InitiatedBy = initiator,
+                            TargetResources = targets,
+                            Result = audit.Result?.ToString() ?? "",
+                            ResultReason = audit.ResultReason ?? "",
+                            ModifiedProperties = string.Join("; ", modifiedProps),
+                            CorrelationId = audit.CorrelationId ?? ""
+                        });
+                    }
+                }
+
+                result.NextPageLink = response?.OdataNextLink;
+                Debug.WriteLine($"Retrieved {result.Items.Count} audit logs this page (has more: {result.HasMorePages})");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error getting audit logs: {ex.Message}");
+                throw;
+            }
+            return result;
         }
     }
 }

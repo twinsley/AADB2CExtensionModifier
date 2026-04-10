@@ -1,123 +1,161 @@
-# Azure AD B2C Extension Attribute Manager
+# Azure AD B2C User Attribute Manager
 
-A WPF desktop application for managing users in Microsoft Entra (Azure AD B2C), with support for viewing and updating extension attributes. It can be found here in the Windows App Store https://apps.microsoft.com/detail/9mxx2kf7xtt8?hl=en-US&gl=US for ease of install.
+A Windows desktop tool for managing Azure AD B2C user accounts through the Microsoft Graph API. Built for administrators who need to inspect, edit, and troubleshoot B2C user attributes — including the notoriously opaque extension attributes — without writing Graph API calls by hand or navigating the Azure Portal's limited B2C user interface.
 
-## Features
+It can be found here in the [Windows App Store](https://apps.microsoft.com/detail/9mxx2kf7xtt8?hl=en-US&gl=US) for ease of install, or you can build it from source.
 
-- **Interactive Authentication**: Uses browser-based authentication with tenant selection
-- **User Search**: Find users by email or User Principal Name
-- **View Extension Attributes**: Display all extension attributes for a selected user
-- **Edit Extension Attributes**: Modify extension attribute values with validation
-- **Change Tracking**: Visual indication of modified attributes before saving
-- **B2C Support**: Automatically detects B2C extension app and formats attributes correctly
+## What it does
 
-## Prerequisites
+- **Search for users** by email, UPN, or B2C identity value (e.g., a federated identity or local account sign-in name)
+- **View and edit standard attributes** like display name, email, job title, phone numbers, address fields, and account status
+- **View and edit extension attributes** — the custom attributes defined through B2C user flows or custom policies, which show up as `extension_{appId}_{attributeName}` in Graph
+- **Browse sign-in logs** for a specific user, with detailed failure information including error codes, conditional access status, and risk levels
+- **Browse audit logs** showing what changes have been made to a user, including which properties were modified and their old/new values
+- **Delete users** (with double confirmation)
+- **Toggle between UTC and local time** in the log tabs
 
-- .NET 8.0 or later
-- Azure AD tenant with appropriate permissions
-- User account with permissions to read and write user properties
+The tool authenticates interactively through the browser using the Microsoft Graph Command Line Tools app registration, so there's no need to create your own app registration or manage client secrets.
 
-## Required Permissions
+## Requirements
 
-The application requests the following Microsoft Graph API permissions:
-- `User.Read.All` - Read all users
-- `User.ReadWrite.All` - Read and write all users
-- `Application.Read.All` - Read application registrations (for B2C extension app detection)
-- `Directory.ReadWrite.All` - Read and write directory data
-- `IdentityUserFlow.Read.All` - Read Authentication Flows (for extension attributes)
+- Windows 10 or later
+- .NET 8 Desktop Runtime
+- An Azure AD B2C tenant
+- A user account with sufficient permissions (see [Permissions](#permissions) below)
+- Azure AD Premium P1 or P2 for sign-in and audit log access
 
-## How to Use
+## Getting started
 
-### 1. Authentication
+1. Clone the repository and build the solution in Visual Studio 2022 or later, or from the command line:
 
-1. Launch the application
-2. Enter your **Tenant ID** in the format:
-   - GUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
-3. Click **Login**
-4. A browser window will open - complete the authentication process
-5. Select your tenant in the authentication dialog if prompted
-6. Once authenticated, the status will show your connected user
+   ```
+   dotnet build
+   ```
 
-### 2. Search for a User
+2. Run the application.
 
-1. After authentication, the User Search section becomes enabled
-2. Enter a user's **email address** or **User Principal Name** in the search box
-3. Click **Search User** or press Enter
-4. If found, the user's information will be displayed
+3. In the **Tenant** field, enter one of the following:
+   - Your tenant ID (a GUID like `12345678-1234-1234-1234-123456789012`)
+   - Your tenant domain (like `contoso.onmicrosoft.com`)
+   - Just the tenant short name (like `contoso` — it will append `.onmicrosoft.com` automatically)
 
-### 3. View and Edit Extension Attributes
+4. Click **Login**. A browser window will open for interactive authentication. Sign in with an account that has admin permissions on the B2C tenant.
 
-1. Once a user is selected, their extension attributes will be loaded automatically
-2. The DataGrid shows:
-   - **Attribute Name**: Full attribute name (e.g., `extension_abc123_CustomAttribute`)
-   - **Display Name**: Friendly name of the attribute
-   - **Data Type**: The attribute's data type (String, Boolean, Integer, DateTime)
-   - **Current Value**: The current value (double-click to edit)
-3. Modified attributes are tracked and counted at the bottom
+5. Once connected, the tenant domain is auto-detected from Graph. If it picks the wrong one (some tenants have multiple verified domains), click **Edit** next to the Tenant Domain field to override it. This matters for B2C identity searches.
 
-### 4. Save Changes
+6. Search for a user by typing their email address or identity value into the search box and clicking **Search User** (or pressing Enter).
 
-1. Edit one or more attribute values in the DataGrid
-2. The **Save Changes** button will become enabled
-3. A counter shows how many attributes have been modified
-4. Click **Save Changes** to persist the updates to Azure AD
-5. Confirm the save operation in the dialog
+## Tabs
 
-### 5. Refresh Data
+### Standard Attributes
 
-- Click **Refresh** to reload the user's extension attributes from Azure AD
-- If you have unsaved changes, you'll be prompted to confirm
+Shows common user properties (display name, email, phone, address, etc.). Editable fields can be modified directly in the grid. Read-only fields like User ID and User Type are shown in gray italic. A counter at the bottom tracks how many attributes you've modified. Click **Save Changes** to write them back, or **Refresh** to discard changes and reload from Graph.
 
-### 6. Logout
+### Extension Attributes
 
-- Click **Logout** to disconnect from Azure AD
-- This will clear all loaded data and return to the login screen
+Shows all B2C extension attributes defined on the tenant's `b2c-extensions-app`. Attributes that have never been set for the user are shown with empty values so you can populate them. Values can be edited inline. The display name and data type columns are populated from the tenant's user flow attribute definitions when available.
 
-## Technical Details
-
-### Architecture
-
-- **MainWindow.xaml**: WPF UI with GroupBoxes for different sections
-- **MainWindow.xaml.cs**: Application logic and event handlers
-- **GraphHandlerService.cs**: Microsoft Graph API interaction layer
-- **ExtensionAttributeModel.cs**: Data model with change tracking using INotifyPropertyChanged
-
-### Authentication
-
-The application uses `InteractiveBrowserCredential` from Azure.Identity for authentication:
-- Default Client ID: `14d82eec-204b-4c2f-b7e8-296a70dab67e` (Microsoft Graph Command Line Tools)
-- Redirect URI: `http://localhost`
-- Tenant selection is handled in the browser authentication flow
-
-### Extension Attribute Format
-
-Azure AD B2C extension attributes follow this format:
+Extension attributes follow the format:
 ```
-extension_{B2C_APP_ID_WITHOUT_HYPHENS}_{ATTRIBUTE_NAME}
+extension_{b2cAppIdWithoutDashes}_{attributeName}
 ```
 
-The application automatically:
-1. Detects the B2C extension app (named `b2c-extensions-app`)
-2. Extracts and formats the App ID
-3. Filters and displays only extension attributes
-4. Handles both B2C and standard extension attributes
+The tool discovers the B2C extensions app automatically and resolves the full attribute names.
+
+### Sign-In Logs
+
+Loads sign-in history for the selected user. Each entry includes:
+
+- Application and resource names
+- IP address and location
+- Client app type
+- Status (color-coded green/red)
+- Error code and failure reason
+- Additional details from Azure AD
+- Conditional access status
+- Risk level and risk detail
+
+Results are paginated — click **Load More** to fetch additional pages. Use the **Show UTC time** checkbox to toggle the Date/Time column between your local timezone and UTC.
+
+Sign-in logs require Azure AD Premium P1/P2 and the `AuditLog.Read.All` permission. Logs are retained for 7–30 days depending on license.
+
+### Audit Logs
+
+Shows directory audit events related to the selected user — attribute changes, password resets, policy updates, etc. Includes the activity name, who initiated the action, target resources, result status and reason, modified properties with old/new values, and a correlation ID for cross-referencing. Also paginated with a UTC toggle.
+
+## Permissions
+
+The application uses `InteractiveBrowserCredential` from Azure.Identity, authenticating against the Microsoft Graph Command Line Tools first-party app registration (client ID `14d82eec-204b-4c2f-b7e8-296a70dab67e`). This is pre-consented in most Azure AD tenants.
+
+The following Graph API permissions are requested:
+
+| Permission | Purpose |
+|---|---|
+| User.Read.All | Read user profiles and search for users |
+| User.ReadWrite.All | Update user attributes |
+| Application.Read.All | Discover the B2C extensions app and its extension properties |
+| Directory.ReadWrite.All | Read/write directory data including extension attributes |
+| IdentityUserFlow.Read.All | Read user flow attribute definitions (display names, data types) |
+| AuditLog.Read.All | Read sign-in and audit logs |
+
+If your tenant requires admin consent for these permissions, a Global Administrator will need to grant consent before the tool can be used.
+
+## Settings
+
+The tool saves your last-used tenant ID and tenant domain to `%APPDATA%\AADB2CExtensionModifier\settings.json` so you don't have to re-enter them each session. No credentials or tokens are stored.
+
+## Project structure
+
+```
+AADB2CExtensionModifier/
+  MainWindow.xaml / .cs          - Main window UI and event handlers
+  App.xaml / .cs                 - Application entry point
+  Services/
+    GraphHandlerService.cs       - All Microsoft Graph API calls
+    AppSettingsService.cs        - Settings file persistence
+  Models/
+    StandardAttributeModel.cs    - Model for standard user properties
+    ExtensionAttributeModel.cs   - Model for B2C extension attributes
+    SignInLogModel.cs            - Model for sign-in log entries
+    AuditLogModel.cs             - Model for audit log entries
+```
+
+## Dependencies
+
+- [Microsoft.Graph](https://www.nuget.org/packages/Microsoft.Graph) v5.98.0 — Microsoft Graph SDK
+- [Azure.Identity](https://www.nuget.org/packages/Azure.Identity) v1.17.1 — Azure authentication
+- [System.Text.Json](https://www.nuget.org/packages/System.Text.Json) v10.0.1 — Settings serialization
 
 ## Troubleshooting
 
-### Authentication Fails
-- Ensure your Tenant ID is correct
-- Check that you have appropriate permissions in the tenant
-- Try logging out and logging back in
+**Authentication fails**
+- Double-check the tenant value. A GUID, full domain, or short name are all accepted.
+- Make sure your account has the required permissions on the target tenant.
+- If your tenant restricts the Microsoft Graph Command Line Tools app, a Global Admin may need to grant consent.
 
-### B2C Extension App Not Found
-- The app will still work but may not format attribute names optimally
-- Ensure your tenant has a B2C configuration
-- Check that the extension app exists and is named `b2c-extensions-app`
+**B2C extension app not found**
+- The tool looks for an application named `b2c-extensions-app` in the tenant. This is created automatically when you configure B2C, but won't exist in a standard Azure AD tenant.
+- The tool will still work for standard and sign-in/audit log features; only extension attribute discovery is affected.
 
-### User Not Found
-- Verify the email address is correct
-- The user must have a `mail` or `userPrincipalName` property
-- Ensure you have `User.Read.All` permission
+**User not found**
+- The search checks the `mail` and `userPrincipalName` fields first, then falls back to B2C identity matching using the tenant domain as the issuer. Make sure the tenant domain is set correctly if you're searching for B2C local accounts.
+
+**Sign-in or audit logs unavailable**
+- These require Azure AD Premium P1 or P2 licensing on the tenant.
+- The `AuditLog.Read.All` permission must be consented.
+
+**UTC and local time show the same values**
+- If your machine's timezone is set to UTC, the two formats will produce identical timestamps. This is expected.
+
+## Known limitations
+
+- Only supports Azure public cloud (`login.microsoftonline.com`). Sovereign clouds (US Gov, China, Germany) are not currently supported.
+- Sign-in and audit logs require Azure AD Premium licensing.
+- Extension attributes that have never been set for any user may not appear if the `b2c-extensions-app` doesn't have corresponding extension property definitions registered.
+
+## License
+
+See the repository for license information.
 
 ### Cannot Save Changes
 - Check that you have `User.ReadWrite.All` permission
