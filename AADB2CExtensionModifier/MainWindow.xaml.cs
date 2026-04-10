@@ -57,9 +57,6 @@ namespace AADB2CExtensionModifier
             AttributesDataGrid.ItemsSource = _extensionAttributes;
             StandardAttributesDataGrid.ItemsSource = _standardAttributes;
 
-            // Load saved settings
-            LoadSavedSettings();
-
             // Monitor for changes to enable Save button
             foreach (var attr in _extensionAttributes)
             {
@@ -70,6 +67,18 @@ namespace AADB2CExtensionModifier
             {
                 attr.PropertyChanged += StandardAttribute_PropertyChanged;
             }
+            
+            // Load settings after window is fully initialized and rendered
+            this.Loaded += MainWindow_Loaded;
+        }
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Load settings after window is rendered and active
+            LoadSavedSettings();
+            
+            // Ensure TenantIdTextBox has proper focus capability for clipboard operations
+            TenantIdTextBox.Focus();
         }
 
         private void Attribute_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -110,6 +119,10 @@ namespace AADB2CExtensionModifier
             {
                 TenantIdTextBox.Text = settings.TenantId;
                 Debug.WriteLine($"Loaded saved Tenant ID: {settings.TenantId}");
+                
+                // Force textbox to reinitialize input handling after programmatic text set
+                TenantIdTextBox.SelectionStart = TenantIdTextBox.Text.Length;
+                TenantIdTextBox.SelectionLength = 0;
             }
             
             if (!string.IsNullOrEmpty(settings.TenantDomain))
